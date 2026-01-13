@@ -1,0 +1,147 @@
+"""
+Tests pour l'application Flask
+"""
+import pytest
+
+# Essayer d'importer web_app, skip si non disponible
+try:
+    from web_app import app
+    WEB_APP_AVAILABLE = True
+except ImportError:
+    WEB_APP_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(
+    not WEB_APP_AVAILABLE,
+    reason="web_app module not available"
+)
+
+@pytest.fixture
+def client():
+    """Créer un client de test Flask"""
+    if not WEB_APP_AVAILABLE:
+        pytest.skip("web_app not available")
+    
+    app.config['TESTING'] = True
+    app.config['SECRET_KEY'] = 'test-secret-key'
+    
+    with app.test_client() as client:
+        yield client
+
+class TestWebApp:
+    
+    def test_index_page(self, client):
+        """Test la page d'accueil"""
+        response = client.get('/')
+        
+        assert response.status_code == 200
+        assert b'ISO 27001' in response.data
+    
+    def test_new_assessment(self, client):
+        """Test le démarrage d'une nouvelle évaluation"""
+        import json
+        
+        data = {
+            'organization': 'Test Corp',
+            'assessor': 'Jane Doe'
+        }
+        
+        response = client.post('/new-assessment',
+                              data=json.dumps(data),
+                              content_type='application/json')
+        
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert 'message' in json_data
+        assert 'assessment_id' in json_data
+    
+    def test_new_assessment_missing_data(self, client):
+        """Test avec des données manquantes"""
+        import json
+        
+        data = {
+            'organization': 'Test Corp'
+            # assessor manquant
+        }
+        
+        response = client.post('/new-assessment',
+                              data=json.dumps(data),
+                              content_type='application/json')
+        
+        assert response.status_code == 400
+    
+    def test_dashboard_without_assessment(self, client):
+        """Test l'accès au dashboard sans évaluation"""
+        response = client.get('/dashboard')
+        
+        assert response.status_code == 200
+        assert b'No active assessment' in response.data or b'ISO 27001' in response.data
+    
+    def test_dashboard_with_assessment(self, client):
+        """Test l'accès au dashboard avec une évaluation active"""
+        # Créer une évaluation d'abord
+        with client.session_transaction() as sess:
+            sess['assessment'] = {
+                'metadata': {
+                    'organization': 'Test Corp',
+                    'assessor': 'Jane Doe',
+                    'date': '2026-01-13T12:00:00',
+                    'standard': 'ISO/IEC 27001:2022'
+                },
+                'controls_assessment': []
+            }
+            sess['organization'] = 'Test Corp'
+        
+        response = client.get('/dashboard')
+        
+        assert response.status_code == 200
+        assert b'Test Corp' in response.data
+    
+    def test_assess_control_api(self, client):
+        """Test l'API d'évaluation de contrôle"""
+        import json
+        
+        # Créer une session avec évaluation
+        with client.session_transaction() as sess:
+            sess['assessment'] = {
+                'metadata': {
+                    'organization': 'Test Corp',
+                    'assessor': 'Jane Doe',
+                    'date': '2026-01-13T12:00:00',
+                    'standard': 'ISO/IEC 27001:2022'
+                },
+                'controls_assessment': []
+            }
+        
+        data = {
+            'control_id': 'A.5.1',
+            'status': 'Implemented',
+            'evidence': 'Test evidence',
+            'comments': 'Test comment'
+        }
+        
+        response = client.post('/api/assess-control',
+                              data=json.dumps(data),
+                              content_type='application/json')
+        
+        assert response.status_code == 200
+    
+    def test_get_statistics_api(self, client):
+        """Test l'API des statistiques"""
+        # Créer une session avec évaluation
+        with client.session_transaction() as sess:
+            sess['assessment'] = {
+                'metadata': {
+                    'organization': 'Test Corp',
+                    'assessor': 'Jane Doe',
+                    'date': '2026-01-13T12:00:00',
+                    'standard': 'ISO/IEC 27001:2022'
+                },
+                'controls_assessment': []
+            }
+        
+        response = client.get('/api/statistics')
+        
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert 'statistics' in json_data
+        assert 'gaps' in json_data

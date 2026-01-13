@@ -24,8 +24,18 @@ class ComplianceVisualizations:
         colors = ['#28a745', '#ffc107', '#dc3545', '#6c757d']
         
         fig, ax = plt.subplots(figsize=(8, 6))
-        ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
-        ax.axis('equal')
+        
+        # Gérer le cas où toutes les valeurs sont à 0
+        if sum(sizes) == 0:
+            ax.text(0.5, 0.5, 'No data available', 
+                    ha='center', va='center', fontsize=16, color='gray')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+        else:
+            ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+            ax.axis('equal')
+        
         plt.title('ISO 27001 Controls Status Distribution', fontsize=14, fontweight='bold')
         
         # Convertir en base64
@@ -42,18 +52,28 @@ class ComplianceVisualizations:
         domains = self.stats['domain_scores']
         
         fig, ax = plt.subplots(figsize=(12, 6))
-        bars = ax.bar(domains.keys(), domains.values(), color='#007bff', alpha=0.7)
         
-        # Ligne de référence 80% (conformité acceptable)
-        ax.axhline(y=80, color='green', linestyle='--', label='Target (80%)')
+        # Gérer le cas où il n'y a pas de domaines
+        if not domains:
+            ax.text(0.5, 0.5, 'No domain data available', 
+                    ha='center', va='center', fontsize=16, color='gray')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+        else:
+            bars = ax.bar(domains.keys(), domains.values(), color='#007bff', alpha=0.7)
+            
+            # Ligne de référence 80% (conformité acceptable)
+            ax.axhline(y=80, color='green', linestyle='--', label='Target (80%)')
+            
+            ax.set_xlabel('Domains', fontsize=12)
+            ax.set_ylabel('Compliance Score (%)', fontsize=12)
+            ax.set_ylim(0, 100)
+            plt.xticks(rotation=45, ha='right')
+            plt.legend()
+            plt.grid(axis='y', alpha=0.3)
         
-        ax.set_xlabel('Domains', fontsize=12)
-        ax.set_ylabel('Compliance Score (%)', fontsize=12)
         ax.set_title('ISO 27001 Compliance Score by Domain', fontsize=14, fontweight='bold')
-        ax.set_ylim(0, 100)
-        plt.xticks(rotation=45, ha='right')
-        plt.legend()
-        plt.grid(axis='y', alpha=0.3)
         
         # Convertir en base64
         buffer = io.BytesIO()
@@ -68,6 +88,10 @@ class ComplianceVisualizations:
         """Génère une heatmap interactive (HTML Plotly)"""
         domains = list(self.stats['domain_scores'].keys())
         scores = list(self.stats['domain_scores'].values())
+        
+        # Gérer le cas vide
+        if not domains:
+            return "<div style='text-align:center; padding:50px; color:gray;'>No domain data available</div>"
         
         fig = go.Figure(data=go.Heatmap(
             z=[scores],
